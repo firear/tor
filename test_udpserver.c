@@ -1,48 +1,42 @@
-#include "hloop.h"
 #include "tor/io_udp.h"
-#include "tor/kcp_tunnel.h"
-#include <pcap.h>
-#include <stdlib.h>
-#include <time.h>
+#include "tor/tor.h"
 
-kcp_tunnel_t* g_tun;
+#include "debug.h"
 
-void recv_cb(const void* buf, int len, void* user)
+tor_t* g_tun = NULL;
+
+void recv_cb(tor_t *tun, const void* buf, int len)
 {
-    printf("%s", (char*)buf);
+    LOGV("%s :%s\n", __func__, (char*)buf);
 }
 
-void startserver()
+void on_accepted(tor_t* tun)
 {
-    io_udp_t* sio = initudpserver(9999);
-    g_tun = new_kcp_tunnel((io_t*)sio, 1000, recv_cb, NULL);
+    LOGI("%s %p", __func__, tun);
+    g_tun = tun;
+    kcp_set_recvcb(tun, recv_cb);
 }
 
-void on_stdin(hio_t* io, void* buf, int buflen)
+void* readstdin(void* p)
 {
-    kcp_send(g_tun, buf, buflen);
+    char buf[1500];
+    while (1) {
+        int buflen = read(STDIN_FILENO, buf, sizeof(buf));
+        if (g_tun) {
+            kcp_send(g_tun, buf, buflen);
+        }
+    }
+    return NULL;
 }
 
 int main(int argc, char const* argv[])
 {
-    const char* host = argv[1];
-    int port = atoi(argv[2]);
+    pthread_t tid;
+    pthread_create(&tid, NULL, readstdin, NULL);
 
-    hloop_t* loop = hloop_new(HLOOP_FLAG_QUIT_WHEN_NO_ACTIVE_EVENTS);
+    io_t* sio = initudpserver("0.0.0.0", 9999, on_accepted);
 
-    // stdin use default readbuf
-    hio_t* stdinio = hread(loop, STDIN_FILENO, NULL, 0, on_stdin);
-
-    if (stdinio == NULL) {
-        return -20;
-    }
-
-    startserver();
-
-    printf("begin loop\n");
-    hloop_run(loop);
-    printf("loop end\n");
-    hloop_free(&loop);
+    io_startloop(sio);
 
     return 0;
 }

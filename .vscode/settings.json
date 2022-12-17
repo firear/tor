@@ -1,6 +1,0 @@
-{
-    "files.associations": {
-        "kcp_tunnel.h": "c",
-        "io.h": "c"
-    }
-}

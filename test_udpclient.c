@@ -1,45 +1,46 @@
-#include "hloop.h"
 #include "tor/io_udp.h"
-#include "tor/kcp_tunnel.h"
+#include "tor/tor.h"
 
-kcp_tunnel_t* g_tun;
+#include "debug.h"
 
-void recv_cb(const void* buf, int len, void* user)
+tor_t* g_tun = NULL;
+
+void recv_cb(tor_t *tun, const void* buf, int len)
 {
-    printf("%s\n", (char *)buf);
+    LOGV("%s :%s\n", __func__, (char*)buf);
 }
 
-void startclient()
+void on_connected(tor_t* tun)
 {
-    io_udp_t* cio = initudpclient("127.0.0.1", 9999);
-    g_tun = new_kcp_tunnel((io_t*)cio, 1000, recv_cb, NULL);
+    LOGI("%s %p", __func__, tun);
+    g_tun = tun;
+    kcp_set_recvcb(tun, recv_cb);
 }
 
-void on_stdin(hio_t* io, void* buf, int buflen)
+void* readstdin(void* p)
 {
-    kcp_send(g_tun, buf, buflen);
+    char buf[1500];
+    while (1) {
+        int buflen = read(STDIN_FILENO, buf, sizeof(buf));
+        if (g_tun) {
+            kcp_send(g_tun, buf, buflen);
+        }
+    }
+    return NULL;
 }
 
 int main(int argc, char const* argv[])
 {
-    const char* host = argv[1];
-    int port = atoi(argv[2]);
-
-    hloop_t* loop = hloop_new(HLOOP_FLAG_QUIT_WHEN_NO_ACTIVE_EVENTS);
-
-    // stdin use default readbuf
-    hio_t* stdinio = hread(loop, STDIN_FILENO, NULL, 0, on_stdin);
-
-    if (stdinio == NULL) {
-        return -20;
+    LOGV("init");
+    pthread_t tid;
+    pthread_create(&tid, NULL, readstdin, NULL);
+    const char* addr = "127.0.0.1";
+    if (argc > 1) {
+        addr = argv[1];
     }
+    io_t* cio = initudpclient(addr, 9999, on_connected);
 
-    startclient();
-
-    printf("begin loop\n");
-    hloop_run(loop);
-    printf("loop end\n");
-    hloop_free(&loop);
+    io_startloop(cio);
 
     return 0;
 }

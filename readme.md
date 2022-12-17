@@ -1,4 +1,4 @@
-tun on raw简称tor
+tunnel on raw简称tor
 
 通过rawsocket建立可靠通信通道。
 
@@ -22,7 +22,29 @@ IP                  |  网络层
 ```
 
 
-windows使用npcap,linux使用libpcap,android使用vpn框架。
+windows使用npcap,linux使用libpcap,android使用vpn框架和socket实现(只支持ICMP)。
 
 1.pcaploop thread
 2.workthread
+
+
+
+
+
+
+## faketcp
+### server:
+iptables -A OUTPUT -p tcp --tcp-flags RST RST  -j DROP
+
+
+### client:
+* linux:
+```
+serverip=192.168.0.2
+serverport=10087
+sudo iptables -A INPUT  -s $serverip -p tcp -m tcp --sport $serverport  -j DROP
+
+sudo iptables -nL --line-numbers
+sudo iptables -D INPUT 1
+```
+
